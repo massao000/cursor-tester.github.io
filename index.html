@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>マウスカーソルテスター（手書き対応）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
+
+  <h1 class="text-3xl font-bold mb-8 text-gray-800 flex items-center gap-2">
+    🖱️ マウスカーソルテスター
+  </h1>
+
+  <div id="cursorContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-7xl"></div>
+
+  <button id="resetAll"
+    class="mt-8 bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-xl shadow transition">
+    全体リセット
+  </button>
+
+  <script>
+    const cursorTypes = [
+      { name: "通常の選択", css: "default" },
+      { name: "ヘルプの選択", css: "help" },
+      { name: "バックグラウンドで作業中", css: "progress" },
+      { name: "待ち状態", css: "wait" },
+      { name: "領域選択", css: "crosshair" },
+      { name: "テキスト選択", css: "text" },
+      { name: "手書き", css: "cell" },
+      { name: "利用不可", css: "not-allowed" },
+      { name: "上下に拡大縮小", css: "ns-resize" },
+      { name: "左右に拡大縮小", css: "ew-resize" },
+      { name: "斜めに拡大縮小1", css: "nwse-resize" },
+      { name: "斜めに拡大縮小2", css: "nesw-resize" },
+      { name: "移動", css: "move" },
+      { name: "代替選択", css: "context-menu" },
+      { name: "リンクの選択", css: "pointer" }
+    ];
+
+    const container = document.getElementById("cursorContainer");
+    const customCursors = {};
+
+    cursorTypes.forEach(type => {
+      const box = document.createElement("div");
+      box.className = "bg-white rounded-2xl shadow p-4 flex flex-col justify-between";
+
+      box.innerHTML = `
+        <h3 class="text-center font-semibold text-gray-700 mb-2">${type.name}</h3>
+        <div id="area-${type.css}" 
+             class="relative h-40 border-2 border-dashed border-gray-300 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 mb-3 overflow-hidden"
+             style="cursor:${type.css}">
+          <canvas class="absolute inset-0 w-full h-full"></canvas>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <input type="file" id="upload-${type.css}" accept=".cur,.png,.jpg,.gif,.ico"
+                 class="block w-full text-sm text-gray-600 file:mr-3 file:py-1 file:px-2
+                        file:rounded-lg file:border-0 file:text-sm file:font-semibold
+                        file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+          <button id="reset-${type.css}"
+            class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-lg text-sm whitespace-nowrap">
+            リセット
+          </button>
+        </div>
+      `;
+      container.appendChild(box);
+
+      const area = box.querySelector(`#area-${type.css}`);
+      const canvas = area.querySelector("canvas");
+      const ctx = canvas.getContext("2d");
+      let drawing = false;
+      let points = [];
+
+      const resizeCanvas = () => {
+        canvas.width = area.clientWidth;
+        canvas.height = area.clientHeight;
+      };
+      resizeCanvas();
+      window.addEventListener("resize", resizeCanvas);
+
+      // 手書き開始
+      area.addEventListener("mousedown", e => {
+        drawing = true;
+        points = [];
+        addPoint(e);
+      });
+      area.addEventListener("mousemove", e => {
+        if (!drawing) return;
+        addPoint(e);
+      });
+      window.addEventListener("mouseup", () => drawing = false);
+
+      function addPoint(e) {
+        const rect = canvas.getBoundingClientRect();
+        points.push({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+          time: Date.now()
+        });
+      }
+
+      // 線を描画＆古い線を消すループ
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const now = Date.now();
+        const lifespan = 2000; // ミリ秒で古い線を消す時間（例：2秒）
+
+        // 古い点を削除
+        points = points.filter(p => now - p.time < lifespan);
+
+        ctx.lineWidth = 1;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+
+        for (let i = 1; i < points.length; i++) {
+          const p1 = points[i - 1];
+          const p2 = points[i];
+          const age = now - p2.time;
+          const alpha = 1 - age / lifespan; // 時間経過で透明に
+          ctx.strokeStyle = `rgba(239,68,68,${alpha})`; // Tailwind red-500
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+        }
+        requestAnimationFrame(draw);
+      }
+      draw();
+
+      // --- カーソル変更（アップロード） ---
+      const upload = box.querySelector(`#upload-${type.css}`);
+      const reset = box.querySelector(`#reset-${type.css}`);
+
+      upload.addEventListener("change", e => {
+        const file = e.target.files[0];
+        if (file) {
+          const url = URL.createObjectURL(file);
+          area.style.cursor = `url(${url}), auto`;
+          customCursors[type.css] = url;
+        }
+      });
+
+      // --- 個別リセット ---
+      reset.addEventListener("click", () => {
+        area.style.cursor = type.css;
+        upload.value = "";
+        delete customCursors[type.css];
+      });
+    });
+
+    // --- 全体リセット ---
+    document.getElementById("resetAll").addEventListener("click", () => {
+      cursorTypes.forEach(type => {
+        const area = document.getElementById(`area-${type.css}`);
+        const upload = document.getElementById(`upload-${type.css}`);
+        area.style.cursor = type.css;
+        upload.value = "";
+      });
+      Object.keys(customCursors).forEach(k => URL.revokeObjectURL(customCursors[k]));
+      for (let k in customCursors) delete customCursors[k];
+    });
+  </script>
+</body>
+</html>
