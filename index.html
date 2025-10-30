@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>マウスカーソルテスター（手書き対応）</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>マウスカーソルテスター（アップロード必須表示対応）</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
 
   <h1 class="text-3xl font-bold mb-8 text-gray-800 flex items-center gap-2">
-    🖱️ マウスカーソルテスター
+    🖱️ マウスカーソルテスター（アップロード必須表示対応）
   </h1>
 
   <div id="cursorContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-7xl"></div>
@@ -19,146 +19,229 @@
     全体リセット
   </button>
 
-  <script>
-    const cursorTypes = [
-      { name: "通常の選択", css: "default" },
-      { name: "ヘルプの選択", css: "help" },
-      { name: "バックグラウンドで作業中", css: "progress" },
-      { name: "待ち状態", css: "wait" },
-      { name: "領域選択", css: "crosshair" },
-      { name: "テキスト選択", css: "text" },
-      { name: "手書き", css: "cell" },
-      { name: "利用不可", css: "not-allowed" },
-      { name: "上下に拡大縮小", css: "ns-resize" },
-      { name: "左右に拡大縮小", css: "ew-resize" },
-      { name: "斜めに拡大縮小1", css: "nwse-resize" },
-      { name: "斜めに拡大縮小2", css: "nesw-resize" },
-      { name: "移動", css: "move" },
-      { name: "代替選択", css: "context-menu" },
-      { name: "リンクの選択", css: "pointer" }
-    ];
+<script>
+/*
+  cursorTypes: 
+    - name: 表示名
+    - css: 直接適用するcursorプロパティ（存在しない場合は null）
+    - requiresUpload: ブラウザ標準に存在しないためファイルアップロードが必要かどうか（trueなら注意メッセージを表示）
+*/
+const cursorTypes = [
+  { name: "通常の選択", css: "default", requiresUpload: false },
+  { name: "ヘルプの選択", css: "help", requiresUpload: false },
+  { name: "バックグラウンドで作業中", css: "progress", requiresUpload: false },
+  { name: "待ち状態", css: "wait", requiresUpload: false },
+  { name: "領域選択", css: "crosshair", requiresUpload: false },
+  { name: "テキスト選択", css: "text", requiresUpload: false },
+  // 以下はブラウザ標準 cursor に存在しないカスタム名（アップロードが必要）
+  { name: "手書き（手書き入力）", css: null, requiresUpload: true },
+  { name: "利用不可", css: "not-allowed", requiresUpload: false },
+  { name: "上下に拡大縮小", css: "ns-resize", requiresUpload: false },
+  { name: "左右に拡大縮小", css: "ew-resize", requiresUpload: false },
+  { name: "斜めに拡大縮小1", css: "nwse-resize", requiresUpload: false },
+  { name: "斜めに拡大縮小2", css: "nesw-resize", requiresUpload: false },
+  { name: "移動", css: "move", requiresUpload: false },
+  { name: "代替選択（代替選択）", css: null, requiresUpload: true },
+  { name: "リンクの選択", css: "pointer", requiresUpload: false },
+  { name: "場所の選択（場所）", css: null, requiresUpload: true },
+  { name: "人の選択（人）", css: null, requiresUpload: true }
+];
 
-    const container = document.getElementById("cursorContainer");
-    const customCursors = {};
+const container = document.getElementById("cursorContainer");
+const customCursors = {}; // { key: objectURL }
 
-    cursorTypes.forEach(type => {
-      const box = document.createElement("div");
-      box.className = "bg-white rounded-2xl shadow p-4 flex flex-col justify-between";
+cursorTypes.forEach((type, idx) => {
+  const key = `type-${idx}`;
 
-      box.innerHTML = `
-        <h3 class="text-center font-semibold text-gray-700 mb-2">${type.name}</h3>
-        <div id="area-${type.css}" 
-             class="relative h-40 border-2 border-dashed border-gray-300 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 mb-3 overflow-hidden"
-             style="cursor:${type.css}">
-          <canvas class="absolute inset-0 w-full h-full"></canvas>
-        </div>
-        <div class="flex items-center justify-between gap-2">
-          <input type="file" id="upload-${type.css}" accept=".cur,.png,.jpg,.gif,.ico"
-                 class="block w-full text-sm text-gray-600 file:mr-3 file:py-1 file:px-2
-                        file:rounded-lg file:border-0 file:text-sm file:font-semibold
-                        file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-          <button id="reset-${type.css}"
-            class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-lg text-sm whitespace-nowrap">
-            リセット
-          </button>
-        </div>
-      `;
-      container.appendChild(box);
+  const box = document.createElement("div");
+  box.className = "bg-white rounded-2xl shadow p-4 flex flex-col ";
 
-      const area = box.querySelector(`#area-${type.css}`);
-      const canvas = area.querySelector("canvas");
-      const ctx = canvas.getContext("2d");
-      let drawing = false;
-      let points = [];
+  box.innerHTML = `
+    <h3 class="text-center font-semibold text-gray-700 mb-2">${type.name}</h3>
+    <div id="area-${key}" 
+         class="relative h-40 border-2 border-dashed border-gray-300 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 mb-3 overflow-hidden flex items-center justify-center"
+         style="cursor:${type.css ? type.css : 'default'}">
+      <canvas class="absolute inset-0 w-full h-full"></canvas>
+      <div class="z-10 pointer-events-none"></div>
+    </div>
 
-      const resizeCanvas = () => {
-        canvas.width = area.clientWidth;
-        canvas.height = area.clientHeight;
-      };
-      resizeCanvas();
-      window.addEventListener("resize", resizeCanvas);
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center gap-2">
+        <input type="file" id="upload-${key}" accept=".cur,.png,.jpg,.gif,.ico"
+               class="block w-full text-sm text-gray-600 file:mr-3 file:py-1 file:px-2
+                      file:rounded-lg file:border-0 file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+        <button id="reset-${key}" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-lg text-sm whitespace-nowrap">
+          リセット
+        </button>
+      </div>
+      <!-- アップロード必須の注意エリア（表示/非表示を切替） -->
+      <p id="notice-${key}" class="text-xs text-yellow-700 bg-yellow-50 px-3 py-1 rounded-md hidden">
+        このカーソルはブラウザ標準に存在しません。表示するにはファイルをアップロードしてください。
+      </p>
+      </div>
+  `;
+  container.appendChild(box);
 
-      // 手書き開始
-      area.addEventListener("mousedown", e => {
-        drawing = true;
-        points = [];
-        addPoint(e);
-      });
-      area.addEventListener("mousemove", e => {
-        if (!drawing) return;
-        addPoint(e);
-      });
-      window.addEventListener("mouseup", () => drawing = false);
+  const area = box.querySelector(`#area-${key}`);
+  const canvas = area.querySelector("canvas");
+  const ctx = canvas.getContext("2d", { alpha: true });
+  const notice = box.querySelector(`#notice-${key}`);
+  const upload = box.querySelector(`#upload-${key}`);
+  const resetBtn = box.querySelector(`#reset-${key}`);
 
-      function addPoint(e) {
-        const rect = canvas.getBoundingClientRect();
-        points.push({
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top,
-          time: Date.now()
-        });
+  // notice の初期表示（requiresUpload が true の場合のみ表示）
+  if (type.requiresUpload) {
+    notice.classList.remove("hidden");
+    // 既定ではカーソルはデフォルト表示にしておく（ユーザーがアップロードしたら置き換える）
+    area.style.cursor = "default";
+  } else {
+    notice.classList.add("hidden");
+    // 標準値があるならそれを適用
+    if (type.css) area.style.cursor = type.css;
+  }
+
+  // 高DPI対応キャンバスリサイズ
+  function resizeCanvasToDisplaySize() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = area.getBoundingClientRect();
+    const cssW = Math.max(1, Math.floor(rect.width));
+    const cssH = Math.max(1, Math.floor(rect.height));
+    // skip if same
+    if (canvas.width === Math.floor(cssW * dpr) && canvas.height === Math.floor(cssH * dpr)) {
+      canvas.style.width = cssW + "px";
+      canvas.style.height = cssH + "px";
+      return;
+    }
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    canvas.width = Math.floor(cssW * dpr);
+    canvas.height = Math.floor(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resizeCanvasToDisplaySize();
+  let resizeTimer;
+  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(resizeCanvasToDisplaySize, 80); });
+
+  // 手書き描画データ
+  let drawing = false;
+  let points = [];
+  const lifespan = 2000; // ms
+
+  function getPointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  // pointer イベントで統一（タッチ・ペン対応）
+  area.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    area.setPointerCapture?.(e.pointerId);
+    drawing = true;
+    points = [];
+    const p = getPointerPos(e);
+    points.push({ x: p.x, y: p.y, time: Date.now() });
+    e.preventDefault();
+  });
+  area.addEventListener("pointermove", (e) => {
+    if (!drawing) return;
+    const p = getPointerPos(e);
+    points.push({ x: p.x, y: p.y, time: Date.now() });
+    e.preventDefault();
+  });
+  area.addEventListener("pointerup", (e) => {
+    if (drawing) {
+      drawing = false;
+      area.releasePointerCapture?.(e.pointerId);
+    }
+  });
+  area.addEventListener("pointercancel", () => { drawing = false; });
+
+  // 描画ループ（古い点はフェードして消える）
+  function drawLoop() {
+    resizeCanvasToDisplaySize();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const now = Date.now();
+    points = points.filter(p => now - p.time < lifespan);
+
+    if (points.length > 1) {
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (let i = 1; i < points.length; i++) {
+        const p1 = points[i - 1], p2 = points[i];
+        const age = now - p2.time;
+        let alpha = 1 - age / lifespan;
+        if (alpha < 0) alpha = 0;
+        ctx.strokeStyle = `rgba(239,68,68,${alpha})`; // red-500
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
       }
+    }
 
-      // 線を描画＆古い線を消すループ
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const now = Date.now();
-        const lifespan = 2000; // ミリ秒で古い線を消す時間（例：2秒）
+    requestAnimationFrame(drawLoop);
+  }
+  requestAnimationFrame(drawLoop);
 
-        // 古い点を削除
-        points = points.filter(p => now - p.time < lifespan);
+  // ファイルアップロード処理（アップロード必須項目にも対応）
+  upload.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    // 追加：既存の objectURL があれば解放
+    if (customCursors[key]) {
+      try { URL.revokeObjectURL(customCursors[key]); } catch (err) {}
+    }
+    customCursors[key] = url;
+    // カーソルに適用（ブラウザがサポートしていれば .cur や png を適用）
+    area.style.cursor = `url(${url}), auto`;
+    // アップロード必須の注意は非表示にする
+    if (type.requiresUpload) notice.classList.add("hidden");
+  });
 
-        ctx.lineWidth = 1;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
+  // 個別リセット
+  resetBtn.addEventListener("click", () => {
+    // revert cursor to standard if available, otherwise default
+    if (type.css) area.style.cursor = type.css;
+    else area.style.cursor = "default";
 
-        for (let i = 1; i < points.length; i++) {
-          const p1 = points[i - 1];
-          const p2 = points[i];
-          const age = now - p2.time;
-          const alpha = 1 - age / lifespan; // 時間経過で透明に
-          ctx.strokeStyle = `rgba(239,68,68,${alpha})`; // Tailwind red-500
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.stroke();
-        }
-        requestAnimationFrame(draw);
-      }
-      draw();
+    // show notice again for required ones
+    if (type.requiresUpload) notice.classList.remove("hidden");
 
-      // --- カーソル変更（アップロード） ---
-      const upload = box.querySelector(`#upload-${type.css}`);
-      const reset = box.querySelector(`#reset-${type.css}`);
+    // clear file input and revoke URL
+    if (customCursors[key]) {
+      try { URL.revokeObjectURL(customCursors[key]); } catch (err) {}
+      delete customCursors[key];
+    }
+    upload.value = "";
+  });
+});
 
-      upload.addEventListener("change", e => {
-        const file = e.target.files[0];
-        if (file) {
-          const url = URL.createObjectURL(file);
-          area.style.cursor = `url(${url}), auto`;
-          customCursors[type.css] = url;
-        }
-      });
+// 全体リセット
+document.getElementById("resetAll").addEventListener("click", () => {
+  cursorTypes.forEach((type, idx) => {
+    const key = `type-${idx}`;
+    const area = document.getElementById(`area-${key}`);
+    const upload = document.getElementById(`upload-${key}`);
+    const notice = document.getElementById(`notice-${key}`);
 
-      // --- 個別リセット ---
-      reset.addEventListener("click", () => {
-        area.style.cursor = type.css;
-        upload.value = "";
-        delete customCursors[type.css];
-      });
-    });
+    if (!area) return;
+    if (type.css) area.style.cursor = type.css;
+    else area.style.cursor = "default";
 
-    // --- 全体リセット ---
-    document.getElementById("resetAll").addEventListener("click", () => {
-      cursorTypes.forEach(type => {
-        const area = document.getElementById(`area-${type.css}`);
-        const upload = document.getElementById(`upload-${type.css}`);
-        area.style.cursor = type.css;
-        upload.value = "";
-      });
-      Object.keys(customCursors).forEach(k => URL.revokeObjectURL(customCursors[k]));
-      for (let k in customCursors) delete customCursors[k];
-    });
-  </script>
+    if (type.requiresUpload && notice) notice.classList.remove("hidden");
+
+    if (upload) upload.value = "";
+  });
+
+  // revoke all created object URLs
+  Object.keys(customCursors).forEach(k => {
+    try { URL.revokeObjectURL(customCursors[k]); } catch (err) {}
+    delete customCursors[k];
+  });
+});
+</script>
 </body>
 </html>
